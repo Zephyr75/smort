@@ -11,23 +11,35 @@ NER_MODEL = "dbmdz/bert-large-cased-finetuned-conll03-english"
 LLM_MODEL = "llama3.2:1b-instruct-q4_K_M"
 
 AVAILABLE_MUSIC = ["jazz_vibes.mp3", "rock_anthem.mp3", "lofi_beats.wav"]
-INTENT_LABELS = ["music", "weather", "light", "chat"]
+INTENT_LABELS = ["music", "weather", "light", "talk", "message"]
+DEFAULT_LOCATION = "Paris"
 
 print("Loading Neural Networks...")
-classifier = pipeline("zero-shot-classification", model=INTENT_MODEL, device=-1) # device=-1 forces CPU
-ner_tagger = pipeline("ner", model=NER_MODEL, aggregation_strategy="simple", device=-1)
+classifier = pipeline(
+    "zero-shot-classification", 
+    model=INTENT_MODEL, 
+    device=-1,
+    model_kwargs={"tie_word_embeddings": False}
+)
+ner_tagger = pipeline(
+    "ner", 
+    model=NER_MODEL, 
+    aggregation_strategy="simple", 
+    device=-1,
+    model_kwargs={"tie_word_embeddings": False}
+)  # ty:ignore[no-matching-overload]
 
 def get_entities(text):
-    """Uses NER to find Locations (LOC) or Miscellaneous (MISC) titles."""
+    """Uses NER to extract recognizable elements."""
     entities = ner_tagger(text)
-    results = {"LOC": None, "MISC": None} # also supports PER(son) and ORG(anisation)
+    results = {"LOC": None, "MISC": None, "PER": None, "ORG": None}
     for ent in entities:
         if ent['entity_group'] in results:
             results[ent['entity_group']] = ent['word']
     return results
 
 def get_llm_chat(text):
-    """Fallback to Llama for creative responses (jokes, greetings)."""
+    """Fallback to OLlama for chat responses."""
     response = ollama.chat(model=LLM_MODEL, messages=[
         {'role': 'system', 'content': 'You are a tiny robot. Keep answers under 15 words.'},
         {'role': 'user', 'content': text}
@@ -49,24 +61,35 @@ def process_request(text):
         return f'CHAT("I am not sure what you mean.")'
 
     if intent == "music":
-        # Try to find the song name using NER
         entities = get_entities(text)
         search_term = entities['MISC'] if entities['MISC'] else text
-        # Fuzzy match against your actual MP3 files
         match = difflib.get_close_matches(search_term, AVAILABLE_MUSIC, n=1, cutoff=0.2)
         song = match[0] if match else "default.mp3"
         return f'MUSIC("{song}")'
 
     elif intent == "weather":
         entities = get_entities(text)
-        city = entities['LOC'] if entities['LOC'] else "your location"
+        city = entities['LOC'] if entities['LOC'] else DEFAULT_LOCATION
         return f'WEATHER("{city}")'
 
     elif intent == "light":
         state = "ON" if "on" in text.lower() else "OFF"
         return f'LIGHT("{state}")'
 
-    else: # intent == "chat"
+    elif intent == "message":
+        entities = get_entities(text)
+        if entities['PER']:
+             dest = entities['PER']
+        else:
+            return f'ERROR(Message destination not found)' 
+        if entities['ORG']:
+             app = entities['ORG']
+        else:
+            return f'ERROR(Messaging application not found)' 
+        state = "ON" if "on" in text.lower() else "OFF"
+        return f'MESSAGE("{dest}","{app}")'
+
+    else: # intent == "talk"
         response = get_llm_chat(text)
         return f'CHAT("{response}")'
 
@@ -76,7 +99,8 @@ if __name__ == "__main__":
         "Play the rock anthem",
         "Is it raining in San Francisco?",
         "Turn the lights on please",
-        "Tell me a short robot joke"
+        "Tell me a short joke",
+        "Send a message to Antoine ROGER on WhatsApp"
     ]
     for t in tests:
-        print(f"PICO COMMAND: {process_request(t)}")
+        print(f"COMMAND: {process_request(t)}")
