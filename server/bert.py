@@ -11,7 +11,7 @@ NER_MODEL = "dslim/bert-base-NER"
 LLM_MODEL = "llama3.2:1b-instruct-q4_K_M"
 
 AVAILABLE_MUSIC = ["jazz_vibes.wav", "rock_anthem.wav", "lofi_beats.wav", "outer_wilds.wav", "zelda.wav"]
-INTENT_LABELS = ["music", "weather", "light", "talk", "message", "task", "timer"]
+INTENT_LABELS = ["music", "weather", "chat", "task", "timer"]
 DEFAULT_LOCATION = "Paris"
 
 print("Loading Neural Networks...")
@@ -32,7 +32,7 @@ ner_tagger = pipeline(
 def get_entities(text):
     """Uses NER to extract recognizable elements."""
     entities = ner_tagger(text)
-    results = {"LOC": None, "MISC": None, "PER": None, "ORG": None}
+    results = {"LOC": None, "MISC": None}
     for ent in entities:
         if ent['entity_group'] in results:
             results[ent['entity_group']] = ent['word']
@@ -58,11 +58,13 @@ def process_request(text):
 
     # 2. DISPATCH LOGIC
     if confidence < 0.45:
-        return f'CHAT("I am not sure what you mean.")'
+        response = get_llm_chat(text)
+        return f'CHAT("{response}")'
 
     if intent == "music":
         entities = get_entities(text)
         search_term = entities['MISC'] if entities['MISC'] else text
+        print(search_term)
         match = difflib.get_close_matches(search_term, AVAILABLE_MUSIC, n=1, cutoff=0.2)
         song = match[0] if match else "default.wav"
         return f'MUSIC("{song}")'
@@ -70,26 +72,16 @@ def process_request(text):
     elif intent == "weather":
         entities = get_entities(text)
         city = entities['LOC'] if entities['LOC'] else DEFAULT_LOCATION
+        print(city)
         return f'WEATHER("{city}")'
 
-    elif intent == "light":
-        state = "ON" if "on" in text.lower() else "OFF"
-        return f'LIGHT("{state}")'
+    elif intent == "task":
+        return f'TASK("test")'
 
-    elif intent == "message":
-        entities = get_entities(text)
-        if entities['PER']:
-             dest = entities['PER']
-        else:
-            return f'ERROR(Message destination not found)' 
-        if entities['ORG']:
-             app = entities['ORG']
-        else:
-            return f'ERROR(Messaging application not found)' 
-        state = "ON" if "on" in text.lower() else "OFF"
-        return f'MESSAGE("{dest}","{app}")'
+    elif intent == "timer":
+        return f'TIMER("test")'
 
-    else: # intent == "talk"
+    else: # intent == "chat"
         response = get_llm_chat(text)
         return f'CHAT("{response}")'
 
@@ -97,10 +89,13 @@ def process_request(text):
 if __name__ == "__main__":
     tests = [
         "Play the rock anthem",
+        "I want to listen to my outer wild song",
+        "Play the my zelda playlist",
         "Is it raining in San Francisco?",
-        "Turn the lights on please",
         "Tell me a short joke",
-        "Send a message to Antoine ROGER on WhatsApp"
+        "Set a 5 minutes timer",
+        "Add an item to my todo list",
+        "Explain the difference between ohms and watts"
     ]
     for t in tests:
         print(f"COMMAND: {process_request(t)}")
