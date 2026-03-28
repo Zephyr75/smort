@@ -5,13 +5,13 @@ from transformers import pipeline
 
 # --- CONFIGURATION ---
 # We use DistilBART for Zero-Shot: It's fast and doesn't need training for new labels.
-INTENT_MODEL = "valhalla/distilbart-mnli-12-1"
+INTENT_MODEL = "cross-encoder/nli-MiniLM2-L6-H768"
 # Standard NER for identifying locations and miscellaneous entities
-NER_MODEL = "dbmdz/bert-large-cased-finetuned-conll03-english"
+NER_MODEL = "dslim/bert-base-NER"
 LLM_MODEL = "llama3.2:1b-instruct-q4_K_M"
 
-AVAILABLE_MUSIC = ["jazz_vibes.mp3", "rock_anthem.mp3", "lofi_beats.wav"]
-INTENT_LABELS = ["music", "weather", "light", "talk", "message"]
+AVAILABLE_MUSIC = ["jazz_vibes.wav", "rock_anthem.wav", "lofi_beats.wav", "outer_wilds.wav", "zelda.wav"]
+INTENT_LABELS = ["music", "weather", "light", "talk", "message", "task", "timer"]
 DEFAULT_LOCATION = "Paris"
 
 print("Loading Neural Networks...")
@@ -64,7 +64,7 @@ def process_request(text):
         entities = get_entities(text)
         search_term = entities['MISC'] if entities['MISC'] else text
         match = difflib.get_close_matches(search_term, AVAILABLE_MUSIC, n=1, cutoff=0.2)
-        song = match[0] if match else "default.mp3"
+        song = match[0] if match else "default.wav"
         return f'MUSIC("{song}")'
 
     elif intent == "weather":
